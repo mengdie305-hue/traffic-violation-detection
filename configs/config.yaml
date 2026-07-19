@@ -1,0 +1,44 @@
+# ============================================================
+# Traffic Violation Detection — 配置文件
+# ============================================================
+
+# 模型路径
+models:
+  yolo: "data/models/yolov8n.pt"           # YOLOv8 预训练权重
+  deepsort_ckpt: "data/models/ckpt.t7"     # DeepSORT 特征提取权重
+  plate_model_dir: "data/models/plate"     # 车牌识别模型目录
+
+# 视频参数
+video:
+  input_path: "data/videos/sample.mp4"
+  output_path: "data/videos/output.mp4"    # 带标注的输出视频
+  frame_skip: 2                            # 跳帧数（1 = 每帧处理）
+  resize_width: 1280
+  resize_height: 720
+
+# ROI 区域（像素坐标，根据实际摄像头位置调整）
+# 用于定义路口关键区域：停止线、信号灯区域、车道方向
+roi:
+  stop_line: [100, 500, 1180, 520]         # [x1, y1, x2, y2] 停止线
+  traffic_light_bbox: [600, 50, 680, 150]  # 信号灯大致区域
+  road_lanes:                               # 各车道行驶方向
+    lane_1: [[0, 520], [400, 520]]          # 左转车道
+    lane_2: [[400, 520], [800, 520]]        # 直行车道
+    lane_3: [[800, 520], [1280, 520]]       # 右转车道
+
+# 违章判定阈值
+violation:
+  red_light:
+    overlap_threshold: 0.3                  # 车辆与停止线的 IoU 阈值
+    red_light_duration: 1.0                 # 红灯状态下停留超过 N 秒判定违章
+  speeding:
+    max_speed_kmh: 60                       # 最高限速（km/h）
+    pixel_to_meter_ratio: 0.05              # 像素到米的转换比例（需标定）
+  wrong_way:
+    angle_threshold: 30                     # 行驶方向偏差角（度）
+
+# 日志
+logging:
+  output_dir: "data/logs"
+  format: "csv"                             # csv / json
+  save_frames: true                         # 是否保存违章帧截图

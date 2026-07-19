@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual Environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data (large files)
+data/videos/*.mp4
+data/logs/*.csv
+data/logs/*.jsonl
+data/images/*
+!data/images/.gitkeep
+data/models/*.pt
+data/models/*.t7
+!data/models/.gitkeep
+
+# Training outputs
+runs/
+outputs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Claude
+.claude/
+
+# Environment
+.env
+.env.local

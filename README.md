@@ -1,0 +1,126 @@
+# Traffic Violation Detection System
+
+基于视频监控和深度学习的交通违章检测系统，支持闯红灯、超速、逆行等违章行为的自动识别。
+
+## 当前状态
+
+> **Pipeline 已完成闭环验证** — Mock 模式全链路跑通（检测 → 追踪 → 违章判定 → 日志 → 可视化输出）。
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| YOLO 检测器 | ✅ 封装完成 | 支持 MPS/CUDA/CPU，`src/detection/yolo_detector.py` |
+| DeepSORT 追踪 | ✅ 简化版可用 | IOU + 中心距离匹配，无需外部权重 |
+| 交通灯识别 | ✅ 可用 | HSV 颜色空间分割，红/黄/绿 |
+| 闯红灯检测 | ✅ 可用 | 停止线越界 + 红灯持续时长判定 |
+| 超速检测 | ✅ 可用 | 轨迹位移 → 真实世界速度换算 |
+| 逆行检测 | ✅ 可用 | 运动方向 vs 车道规定方向偏差 |
+| 车牌识别 | ⚠️ Mock | PaddleOCR 可选，当前使用 mock 后端 |
+| 日志系统 | ✅ 可用 | CSV / JSON 双格式 |
+| Mock 模式 | ✅ 可用 | `--mock` 颜色检测，无需 GPU |
+| 训练脚本 | ✅ 代码完成 | `server/train_yolo.py`，需标注数据 |
+| 真实数据集 | ❌ 待准备 | 需下载或自行录制 |
+
+## 项目结构
+
+```
+traffic/
+├── src/                         # 源代码
+│   ├── detection/               # 目标检测模块
+│   │   ├── yolo_detector.py     # YOLOv8 检测器封装
+│   │   └── traffic_light.py     # 交通灯颜色识别 (HSV)
+│   ├── tracking/                # 目标追踪模块
+│   │   └── deepsort_tracker.py  # DeepSORT 简化实现
+│   ├── recognition/             # 车牌识别模块
+│   │   └── plate_recognizer.py  # PaddleOCR / Mock 后端
+│   ├── violation/               # 违章判定模块
+│   │   ├── red_light.py         # 闯红灯检测
+│   │   ├── speeding.py          # 超速检测
+│   │   └── wrong_way.py         # 逆行检测
+│   ├── utils/                   # 工具
+│   │   ├── video_utils.py       # 视频读写 & ROI
+│   │   ├── draw_utils.py        # 可视化绘制
+│   │   └── log_utils.py         # 违章日志 (CSV/JSON)
+│   └── main.py                  # 主 Pipeline 入口
+├── configs/
+│   └── config.yaml              # 配置文件
+├── server/                      # 服务器端
+│   ├── train_yolo.py            # YOLO 训练脚本
+│   └── evaluate.py              # 模型评估
+├── scripts/
+│   ├── generate_test_video.py   # 生成模拟路口测试视频
+│   └── prepare_data.py          # 视频抽帧 & 数据集准备
+├── tests/
+│   └── test_detection.py        # 检测模块单元测试
+└── data/
+    ├── videos/                  # 测试视频
+    ├── models/                  # 模型权重
+    └── logs/                    # 违章日志输出
+```
+
+## 核心流程
+
+```
+视频输入 → 帧提取 → 检测(车辆) → DeepSORT追踪 → 交通灯识别
+                                                    ↓
+                       日志保存 ← 车牌识别 ← 违章判定(闯红灯/超速/逆行)
+                                                    ↓
+                                               可视化输出
+```
+
+## 快速开始
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. Mock 模式 — 无需 GPU，用彩色检测验证 Pipeline
+python src/main.py --mock --video data/videos/test_intersection.mp4 --show
+
+# 3. 真实 YOLO 推理 — 需要真实路口视频
+python src/main.py --video data/videos/real_intersection.mp4 --config configs/config.yaml
+
+# 4. 生成测试视频
+python scripts/generate_test_video.py
+```
+
+## 两种运行模式
+
+| 模式 | 命令 | 检测方式 | 适用场景 |
+|------|------|---------|---------|
+| Mock | `--mock` | 颜色阈值 + 轮廓 | 开发调试、无 GPU、模拟视频 |
+| YOLO | 默认 | YOLOv8 推理 | 真实路口视频、GPU/MPS 加速 |
+
+## 新增违章条例
+
+模块化设计，加新条例只需 3 步，训练和规则互不影响：
+
+```python
+# 1. 新建 src/violation/illegal_parking.py
+class IllegalParkingDetector:
+    def check_violation(self, track_id, bbox, ...):
+        ...
+
+# 2. 注册到 src/violation/__init__.py
+from .illegal_parking import IllegalParkingDetector
+
+# 3. 在 main.py Pipeline 循环中调用
+violation = parking_detector.check_violation(...)
+```
+
+## 本地 vs 服务器 分工
+
+| 阶段 | 本地 (Mac) | 服务器 (GPU) |
+|------|-----------|-------------|
+| 数据准备 | ✅ 视频抽帧、标注 | - |
+| 违章逻辑开发 | ✅ 编写 & 调试 | - |
+| 模型推理测试 | ✅ MPS/CPU 轻量推理 | ✅ 大批量推理 |
+| 模型训练 | ❌ 不推荐 | ✅ YOLO 微调 |
+| 可视化 | ✅ 本地预览 | - |
+
+## 技术栈
+
+- **YOLOv8** — 车辆 + 交通灯目标检测
+- **DeepSORT** — 多目标追踪（简化实现，IOU + 距离匹配）
+- **OpenCV** — 图像处理、视频读写、颜色分割
+- **PaddleOCR** — 车牌号码识别（可选）
+- **PyTorch** — 深度学习框架

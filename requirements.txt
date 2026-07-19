@@ -1,0 +1,30 @@
+# Core
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+pyyaml>=6.0
+
+# YOLO
+ultralytics>=8.0.0
+
+# DeepSORT
+scipy>=1.10.0
+filterpy>=1.4.5
+scikit-learn>=1.3.0
+
+# License Plate Recognition
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+
+# Logging & Utils
+loguru>=0.7.0
+pandas>=2.0.0
+tqdm>=4.65.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Testing
+pytest>=7.4.0
