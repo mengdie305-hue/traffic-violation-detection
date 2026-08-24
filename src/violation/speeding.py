@@ -47,12 +47,14 @@ class SpeedingDetector:
 
         self.violations: List[SpeedingViolation] = []
         self._speed_history: dict = {}  # track_id → List[float]
+        self._violating_tracks = set()
 
     def calculate_speed(
         self,
         track_id: int,
         prev_center: Tuple[float, float],
         curr_center: Tuple[float, float],
+        delta_time: Optional[float] = None,
     ) -> float:
         """
         根据相邻帧位移计算瞬时速度。
@@ -73,8 +75,14 @@ class SpeedingDetector:
         # 转为真实世界位移（米）
         dm = dp * self.pixel_to_meter_ratio
 
+        # 使用真实时间差，避免跳帧时仍按单帧间隔计算而高估速度。
+        if delta_time is None:
+            delta_time = 1.0 / self.fps if self.fps > 0 else 0.0
+        if delta_time <= 0:
+            return 0.0
+
         # 速度 = 位移 / 时间 → km/h
-        speed_ms = dm * self.fps           # 米/秒
+        speed_ms = dm / delta_time         # 米/秒
         speed_kmh = speed_ms * 3.6         # 公里/小时
 
         return speed_kmh
@@ -84,6 +92,7 @@ class SpeedingDetector:
         track_id: int,
         prev_center: Tuple[float, float],
         curr_center: Tuple[float, float],
+        delta_time: Optional[float] = None,
     ) -> float:
         """
         更新速度估计（带平滑）。
@@ -91,7 +100,9 @@ class SpeedingDetector:
         Returns:
             平滑后的速度 (km/h)
         """
-        raw_speed = self.calculate_speed(track_id, prev_center, curr_center)
+        raw_speed = self.calculate_speed(
+            track_id, prev_center, curr_center, delta_time
+        )
 
         if track_id not in self._speed_history:
             self._speed_history[track_id] = []
@@ -114,6 +125,7 @@ class SpeedingDetector:
         bbox: Tuple[float, float, float, float],
         timestamp: float,
         frame_idx: int,
+        delta_time: Optional[float] = None,
     ) -> Optional[SpeedingViolation]:
         """
         检查是否超速。
@@ -121,9 +133,14 @@ class SpeedingDetector:
         Returns:
             超速时返回违章记录，否则返回 None
         """
-        speed = self.update(track_id, prev_center, curr_center)
+        speed = self.update(
+            track_id, prev_center, curr_center, delta_time
+        )
 
         if speed > self.max_speed_kmh:
+            if track_id in self._violating_tracks:
+                return None
+            self._violating_tracks.add(track_id)
             violation = SpeedingViolation(
                 track_id=track_id,
                 speed_kmh=round(speed, 1),
@@ -135,4 +152,5 @@ class SpeedingDetector:
             self.violations.append(violation)
             return violation
 
+        self._violating_tracks.discard(track_id)
         return None

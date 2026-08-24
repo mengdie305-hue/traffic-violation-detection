@@ -6,6 +6,8 @@
 用于验证 Pipeline 全流程，无需真实监控视频。
 """
 
+import argparse
+
 import cv2
 import numpy as np
 
@@ -16,7 +18,7 @@ W, H = 1280, 720
 FPS = 30
 DURATION = 20  # 秒
 TOTAL_FRAMES = FPS * DURATION
-OUTPUT = "data/videos/test_intersection.mp4"
+DEFAULT_OUTPUT = "data/videos/test_intersection.mp4"
 
 # ============================================================
 # 路口参数
@@ -46,13 +48,13 @@ SCENARIOS = [
     {"start": 30,  "lane": 700, "speed": 2.5, "color": 1, "red_run": False, "dir": "down"},
     {"start": 60,  "lane": 400, "speed": 2.0, "color": 3, "red_run": False, "dir": "down"},
     # ⚠ 闯红灯车 (红灯时越过停止线)
-    {"start": 170, "lane": 550, "speed": 2.5, "color": 4, "red_run": True,  "dir": "down"},
-    {"start": 190, "lane": 600, "speed": 2.8, "color": 5, "red_run": True,  "dir": "down"},
+    {"start": 60,  "lane": 550, "speed": 2.5, "color": 4, "red_run": True,  "dir": "down"},
+    {"start": 100, "lane": 600, "speed": 2.8, "color": 3, "red_run": True,  "dir": "down"},
     # 正常车
     {"start": 200, "lane": 350, "speed": 2.0, "color": 0, "red_run": False, "dir": "down"},
     {"start": 230, "lane": 450, "speed": 2.2, "color": 2, "red_run": False, "dir": "down"},
     # ⚠ 再一辆闯红灯
-    {"start": 280, "lane": 500, "speed": 2.6, "color": 3, "red_run": True,  "dir": "down"},
+    {"start": 365, "lane": 500, "speed": 2.6, "color": 4, "red_run": True,  "dir": "down"},
     {"start": 300, "lane": 650, "speed": 2.0, "color": 1, "red_run": False, "dir": "down"},
 ]
 
@@ -158,12 +160,15 @@ def get_light_state(frame_idx):
         return "green"
 
 
-def main():
-    import os
-    os.makedirs("data/videos", exist_ok=True)
+def generate_video(output_path: str = DEFAULT_OUTPUT):
+    """生成确定性的 Mock 路口视频。"""
+    from pathlib import Path
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(OUTPUT, fourcc, FPS, (W, H))
+    writer = cv2.VideoWriter(str(output), fourcc, FPS, (W, H))
 
     vehicles = SCENARIOS
 
@@ -214,10 +219,17 @@ def main():
             print(f"  Generating frame {frame_idx}/{TOTAL_FRAMES}...")
 
     writer.release()
-    print(f"\n✓ Test video saved to: {OUTPUT}")
+    print(f"\n✓ Test video saved to: {output}")
     print(f"  Duration: {DURATION}s, Frames: {TOTAL_FRAMES}, Size: {W}x{H}")
     print(f"  Scenarios: {len(SCENARIOS)} vehicles")
     print(f"  Red-light runners: {sum(1 for v in SCENARIOS if v['red_run'])}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate the mock intersection video")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT)
+    args = parser.parse_args()
+    generate_video(args.output)
 
 
 if __name__ == "__main__":

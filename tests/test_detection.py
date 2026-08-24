@@ -80,5 +80,12 @@ class TestRedLightDetector:
         assert detector._is_behind_stop_line(bbox)
 
 
+def test_yolo_detector_rejects_missing_explicit_model_path(tmp_path):
+    from src.detection import YOLODetector
+
+    with pytest.raises(FileNotFoundError, match="YOLO model not found"):
+        YOLODetector(model_path=str(tmp_path / "missing.pt"), device="cpu")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

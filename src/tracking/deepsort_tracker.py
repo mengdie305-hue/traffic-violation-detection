@@ -23,6 +23,8 @@ class Track:
     history: List[Tuple[float, float]] = field(default_factory=list)
     frames_since_update: int = 0
     total_frames: int = 0
+    was_updated: bool = False
+    confidence: Optional[float] = None
 
     @property
     def is_active(self) -> bool:
@@ -69,6 +71,8 @@ class DeepSORTTracker:
         detections: np.ndarray,    # [N, 4] (x1,y1,x2,y2)
         class_ids: np.ndarray,     # [N]
         class_names: List[str],    # [N]
+        scores: Optional[np.ndarray] = None,  # [N]
+        frame: Optional[np.ndarray] = None,
     ) -> List[Track]:
         """
         用新检测框更新追踪状态。
@@ -79,6 +83,7 @@ class DeepSORTTracker:
         # 预测：更新已有追踪的位置（简化：直接用上一帧位置预测）
         for track in self.tracks.values():
             track.frames_since_update += 1
+            track.was_updated = False
 
         if len(detections) == 0:
             return self._get_active_tracks()
@@ -95,23 +100,33 @@ class DeepSORTTracker:
             (detections[:, 1] + detections[:, 3]) / 2,
         ])
 
-        # 简单距离匹配
+        # 简单的全局贪心匹配。显式保存 (track_index, detection_index)，
+        # 避免分别存入 set 后丢失二者的配对关系。
+        matches = []
         matched_track_indices = set()
         matched_det_indices = set()
 
         if len(tracked_centers) > 0 and len(det_centers) > 0:
+            candidates = []
             for ti, tc in enumerate(tracked_centers):
                 for di, dc in enumerate(det_centers):
-                    if di in matched_det_indices:
+                    track = self.tracks[tracked_ids[ti]]
+                    if int(track.class_id) != int(class_ids[di]):
                         continue
                     dist = np.linalg.norm(tc - dc)
                     if dist < self.max_distance:
-                        matched_track_indices.add(ti)
-                        matched_det_indices.add(di)
-                        break
+                        candidates.append((float(dist), ti, di))
+
+            # 优先选择距离最小的组合，每条轨迹和每个检测最多使用一次。
+            for _, ti, di in sorted(candidates):
+                if ti in matched_track_indices or di in matched_det_indices:
+                    continue
+                matches.append((ti, di))
+                matched_track_indices.add(ti)
+                matched_det_indices.add(di)
 
         # 更新已匹配的追踪
-        for ti, det_i in zip(matched_track_indices, list(matched_det_indices)[:len(matched_track_indices)]):
+        for ti, det_i in matches:
             tid = tracked_ids[ti]
             track = self.tracks[tid]
             track.bbox = tuple(detections[det_i].tolist())
@@ -124,6 +139,10 @@ class DeepSORTTracker:
             track.history.append(new_center)
             track.frames_since_update = 0
             track.total_frames += 1
+            track.was_updated = True
+            track.confidence = (
+                float(scores[det_i]) if scores is not None else None
+            )
             # 限制历史长度
             if len(track.history) > 100:
                 track.history = track.history[-100:]
@@ -141,6 +160,11 @@ class DeepSORTTracker:
                     bbox=tuple(detections[di].tolist()),
                     center=center,
                     history=[center],
+                    total_frames=1,
+                    was_updated=True,
+                    confidence=(
+                        float(scores[di]) if scores is not None else None
+                    ),
                 )
 
         # 清理过期追踪
@@ -157,5 +181,6 @@ class DeepSORTTracker:
         """获取所有确认的活跃追踪。"""
         return [
             t for t in self.tracks.values()
-            if t.is_active and t.total_frames >= self.min_hits
+            if t.frames_since_update <= self.max_age
+            and t.total_frames >= self.min_hits
         ]

@@ -8,6 +8,26 @@ models:
   deepsort_ckpt: "data/models/ckpt.t7"     # DeepSORT 特征提取权重
   plate_model_dir: "data/models/plate"     # 车牌识别模型目录
 
+# 车牌识别。真实模式默认使用 PaddleOCR；初始化失败时返回 UNKNOWN，
+# 不会静默生成模拟号码。Mock Pipeline 会强制使用 mock 后端。
+recognition:
+  backend: "paddleocr"                     # paddleocr / openalpr / disabled
+  lang: "en"                               # en / ch
+  fallback_to_mock: false
+  sample_interval: 5                        # 每辆车每 N 次有效检测执行一次 OCR
+  vote_window: 5                            # 多帧投票窗口
+  plate_region_start: 0.5                   # 车辆框下部区域起始比例
+
+# 追踪后端。真实模式使用完整 DeepSORT；Mock 模式强制使用 simple。
+tracking:
+  backend: "realtime_deepsort"             # realtime_deepsort / simple
+  max_age: 30
+  min_hits: 3
+  max_distance: 50.0                       # simple 后端中心距离阈值
+  max_iou_distance: 0.7                    # DeepSORT IoU 门限
+  max_cosine_distance: 0.2                 # DeepSORT 外观特征门限
+  embedder: "mobilenet"
+
 # 视频参数
 video:
   input_path: "data/videos/sample.mp4"
@@ -30,7 +50,7 @@ roi:
 violation:
   red_light:
     overlap_threshold: 0.3                  # 车辆与停止线的 IoU 阈值
-    red_light_duration: 1.0                 # 红灯状态下停留超过 N 秒判定违章
+    red_light_duration: 1.0                 # 红灯稳定至少 N 秒后才接受跨线事件
   speeding:
     max_speed_kmh: 60                       # 最高限速（km/h）
     pixel_to_meter_ratio: 0.05              # 像素到米的转换比例（需标定）

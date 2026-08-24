@@ -1,0 +1,28 @@
+{
+  "video": "data/videos/test_intersection.mp4",
+  "source": "scripts/generate_test_video.py",
+  "fps": 30,
+  "expected_events": [
+    {
+      "violation_type": "red_light",
+      "scenario_index": 4,
+      "expected_frame_range": [176, 182],
+      "lane_x": 550,
+      "color": "purple"
+    },
+    {
+      "violation_type": "red_light",
+      "scenario_index": 5,
+      "expected_frame_range": [203, 209],
+      "lane_x": 600,
+      "color": "yellow"
+    },
+    {
+      "violation_type": "red_light",
+      "scenario_index": 8,
+      "expected_frame_range": [477, 483],
+      "lane_x": 500,
+      "color": "purple"
+    }
+  ]
+}

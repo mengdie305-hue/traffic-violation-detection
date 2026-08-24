@@ -39,6 +39,13 @@ class YOLODetector:
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
 
+        model_path_obj = Path(model_path)
+        if (
+            (model_path_obj.is_absolute() or model_path_obj.parent != Path("."))
+            and not model_path_obj.is_file()
+        ):
+            raise FileNotFoundError(f"YOLO model not found: {model_path}")
+
         # 设备选择：优先 MPS (Apple Silicon) > CUDA > CPU
         if device == "auto":
             if torch.backends.mps.is_available():
@@ -70,6 +77,13 @@ class YOLODetector:
                 scores: [N]
                 class_ids: [N]
         """
+        if frame is None or frame.size == 0:
+            return (
+                np.empty((0, 4), dtype=np.float32),
+                np.empty((0,), dtype=np.float32),
+                np.empty((0,), dtype=np.int32),
+            )
+
         results = self.model(
             frame,
             conf=self.conf_threshold,

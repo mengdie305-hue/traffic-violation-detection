@@ -6,11 +6,12 @@
 
 import csv
 import json
-import os
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+import cv2
+import numpy as np
 
 
 class ViolationLogger:
@@ -34,6 +35,7 @@ class ViolationLogger:
         self.save_frames = save_frames
 
         self.violations: List[Dict[str, Any]] = []
+        self._event_keys = set()
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def log(
@@ -44,8 +46,13 @@ class ViolationLogger:
         frame_idx: int,
         bbox: tuple,
         plate_number: Optional[str] = None,
+        traffic_light_state: Optional[str] = None,
+        detection_confidence: Optional[float] = None,
+        vehicle_class_id: Optional[int] = None,
+        vehicle_class_name: Optional[str] = None,
+        frame: Optional[np.ndarray] = None,
         extra: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> Optional[Dict[str, Any]]:
         """
         记录一条违章事件。
 
@@ -58,6 +65,10 @@ class ViolationLogger:
             plate_number: 车牌号码
             extra: 额外字段（如速度、方向角度等）
         """
+        event_key = (self.session_id, int(track_id), violation_type)
+        if event_key in self._event_keys:
+            return None
+
         record = {
             "id": len(self.violations) + 1,
             "session_id": self.session_id,
@@ -71,12 +82,37 @@ class ViolationLogger:
             "bbox_x2": bbox[2],
             "bbox_y2": bbox[3],
             "plate_number": plate_number or "UNKNOWN",
+            "traffic_light_state": traffic_light_state or "UNKNOWN",
+            "detection_confidence": (
+                round(float(detection_confidence), 4)
+                if detection_confidence is not None
+                else None
+            ),
+            "vehicle_class_id": vehicle_class_id,
+            "vehicle_class_name": vehicle_class_name or "UNKNOWN",
+            "evidence_path": "",
         }
 
         if extra:
             record.update(extra)
 
+        if self.save_frames and frame is not None and frame.size > 0:
+            evidence_dir = self.output_dir / "evidence" / self.session_id
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            evidence_path = evidence_dir / (
+                f"{violation_type}_track-{track_id}_frame-{frame_idx}.jpg"
+            )
+            evidence_frame = frame.copy()
+            x1, y1, x2, y2 = [int(v) for v in bbox]
+            cv2.rectangle(
+                evidence_frame, (x1, y1), (x2, y2), (0, 0, 255), 3
+            )
+            if cv2.imwrite(str(evidence_path), evidence_frame):
+                record["evidence_path"] = str(evidence_path)
+
+        self._event_keys.add(event_key)
         self.violations.append(record)
+        return record
 
     def _format_timestamp(self, seconds: float) -> str:
         """秒数转 时:分:秒 格式。"""
@@ -105,9 +141,14 @@ class ViolationLogger:
         if not self.violations:
             return str(filepath)
 
-        fieldnames = self.violations[0].keys()
+        # 不同违章类型可能携带不同 extra 字段，CSV 列取所有字段并集。
+        fieldnames = list(dict.fromkeys(
+            key for record in self.violations for key in record.keys()
+        ))
         with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(
+                f, fieldnames=fieldnames, extrasaction="ignore"
+            )
             writer.writeheader()
             writer.writerows(self.violations)
 

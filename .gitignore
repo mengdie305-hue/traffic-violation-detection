@@ -21,6 +21,7 @@ venv/
 data/videos/*.mp4
 data/logs/*.csv
 data/logs/*.jsonl
+data/logs/evidence/
 data/images/*
 !data/images/.gitkeep
 data/models/*.pt

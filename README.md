@@ -9,12 +9,12 @@
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | YOLO 检测器 | ✅ 封装完成 | 支持 MPS/CUDA/CPU，`src/detection/yolo_detector.py` |
-| DeepSORT 追踪 | ✅ 简化版可用 | IOU + 中心距离匹配，无需外部权重 |
+| DeepSORT 追踪 | ✅ 已接入 | 真实模式使用 `deep-sort-realtime`；Mock 使用轻量匹配器 |
 | 交通灯识别 | ✅ 可用 | HSV 颜色空间分割，红/黄/绿 |
 | 闯红灯检测 | ✅ 可用 | 停止线越界 + 红灯持续时长判定 |
 | 超速检测 | ✅ 可用 | 轨迹位移 → 真实世界速度换算 |
 | 逆行检测 | ✅ 可用 | 运动方向 vs 车道规定方向偏差 |
-| 车牌识别 | ⚠️ Mock | PaddleOCR 可选，当前使用 mock 后端 |
+| 车牌识别 | ⚠️ 已接入待实测 | 真实模式可配置 PaddleOCR；失败明确记录 `UNKNOWN` |
 | 日志系统 | ✅ 可用 | CSV / JSON 双格式 |
 | Mock 模式 | ✅ 可用 | `--mock` 颜色检测，无需 GPU |
 | 训练脚本 | ✅ 代码完成 | `server/train_yolo.py`，需标注数据 |
@@ -29,7 +29,8 @@ traffic/
 │   │   ├── yolo_detector.py     # YOLOv8 检测器封装
 │   │   └── traffic_light.py     # 交通灯颜色识别 (HSV)
 │   ├── tracking/                # 目标追踪模块
-│   │   └── deepsort_tracker.py  # DeepSORT 简化实现
+│   │   ├── deepsort_tracker.py  # Mock 使用的轻量追踪器
+│   │   └── realtime_deepsort_tracker.py # 完整 DeepSORT 适配器
 │   ├── recognition/             # 车牌识别模块
 │   │   └── plate_recognizer.py  # PaddleOCR / Mock 后端
 │   ├── violation/               # 违章判定模块
@@ -73,14 +74,16 @@ traffic/
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. Mock 模式 — 无需 GPU，用彩色检测验证 Pipeline
-python src/main.py --mock --video data/videos/test_intersection.mp4 --show
+# 2. 生成并运行 Mock 演示（无需 GUI 或 GPU）
+python scripts/generate_test_video.py
+python src/main.py --mock --video data/videos/test_intersection.mp4 \
+  --output data/videos/test_intersection_output.mp4
 
 # 3. 真实 YOLO 推理 — 需要真实路口视频
 python src/main.py --video data/videos/real_intersection.mp4 --config configs/config.yaml
 
-# 4. 生成测试视频
-python scripts/generate_test_video.py
+# 4. 可选：加 --show 实时显示，按 q 退出
+python src/main.py --mock --video data/videos/test_intersection.mp4 --show
 ```
 
 ## 两种运行模式
@@ -89,6 +92,9 @@ python scripts/generate_test_video.py
 |------|------|---------|---------|
 | Mock | `--mock` | 颜色阈值 + 轮廓 | 开发调试、无 GPU、模拟视频 |
 | YOLO | 默认 | YOLOv8 推理 | 真实路口视频、GPU/MPS 加速 |
+
+真实模式默认配置为 YOLOv8n + `deep-sort-realtime` + PaddleOCR。Mock
+模式会使用轻量追踪器和模拟 OCR，以保证测试结果确定且不下载模型。
 
 ## 新增违章条例
 
@@ -120,7 +126,7 @@ violation = parking_detector.check_violation(...)
 ## 技术栈
 
 - **YOLOv8** — 车辆 + 交通灯目标检测
-- **DeepSORT** — 多目标追踪（简化实现，IOU + 距离匹配）
+- **DeepSORT** — 真实模式使用运动预测、关联和外观特征；Mock 模式使用轻量确定性匹配
 - **OpenCV** — 图像处理、视频读写、颜色分割
 - **PaddleOCR** — 车牌号码识别（可选）
 - **PyTorch** — 深度学习框架

@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.detection import YOLODetector, TrafficLightDetector
 from src.detection.traffic_light import TrafficLightState
-from src.tracking import DeepSORTTracker
+from src.tracking import create_tracker
 from src.recognition import PlateRecognizer
 from src.violation import RedLightDetector, SpeedingDetector, WrongWayDetector
 from src.utils.video_utils import VideoProcessor, draw_roi
@@ -227,8 +227,22 @@ def main():
     else:
         detector = None
 
-    # --- DeepSORT 追踪器 ---
-    tracker = DeepSORTTracker(min_hits=3)
+    # --- 追踪器：真实模式使用完整 DeepSORT，Mock 使用轻量确定性后端 ---
+    tracking_cfg = config.get("tracking", {})
+    tracking_backend = (
+        "simple" if args.mock
+        else tracking_cfg.get("backend", "realtime_deepsort")
+    )
+    tracker = create_tracker(
+        backend=tracking_backend,
+        max_age=tracking_cfg.get("max_age", 30),
+        min_hits=tracking_cfg.get("min_hits", 3),
+        max_distance=tracking_cfg.get("max_distance", 50.0),
+        max_iou_distance=tracking_cfg.get("max_iou_distance", 0.7),
+        max_cosine_distance=tracking_cfg.get("max_cosine_distance", 0.2),
+        embedder=tracking_cfg.get("embedder", "mobilenet"),
+        embedder_gpu=(args.device == "cuda"),
+    )
 
     # --- 交通灯识别（mock 模式下内联处理，不用此实例）---
     tl_detector = TrafficLightDetector(
@@ -237,7 +251,17 @@ def main():
     )
 
     # --- 车牌识别 ---
-    plate_recognizer = PlateRecognizer(backend="mock")
+    recognition_cfg = config.get("recognition", {})
+    plate_recognizer = PlateRecognizer(
+        backend=("mock" if args.mock else recognition_cfg.get("backend", "paddleocr")),
+        lang=recognition_cfg.get("lang", "en"),
+        fallback_to_mock=(
+            True if args.mock else recognition_cfg.get("fallback_to_mock", False)
+        ),
+        sample_interval=recognition_cfg.get("sample_interval", 5),
+        vote_window=recognition_cfg.get("vote_window", 5),
+        plate_region_start=recognition_cfg.get("plate_region_start", 0.5),
+    )
 
     # --- 违章检测器 ---
     roi_cfg = config["roi"]
@@ -281,10 +305,15 @@ def main():
     # ==========================================
     print("\nProcessing video...")
     violation_ids = set()
+    previous_observations = {}
+    processed_count = 0
+    last_frame_idx = -1
 
     for frame_idx, timestamp, frame in video.frames():
-        if args.max_frames and frame_idx > args.max_frames:
+        if args.max_frames is not None and processed_count >= args.max_frames:
             break
+        processed_count += 1
+        last_frame_idx = frame_idx
 
         # --- 2a. 车辆检测 ---
         if args.mock:
@@ -308,16 +337,25 @@ def main():
                 x1, y1, x2, y2 = [int(v) for v in tl_boxes[best_idx]]
                 tl_roi = (x1, y1, x2, y2)
                 light_state = tl_detector.recognize(frame[y1:y2, x1:x2])
+
             else:
                 x1, y1, x2, y2 = tl_roi
                 light_state = tl_detector.recognize(frame[y1:y2, x1:x2])
 
+        # 即使当前帧没有车辆，也要维护连续红灯的真实开始时间。
+        red_light_detector.update_light_state(light_state, timestamp)
+
         # --- 2c. 车辆追踪 ---
-        tracks = tracker.update(vehicle_boxes, vehicle_classes, vehicle_names)
+        tracks = tracker.update(
+            vehicle_boxes, vehicle_classes, vehicle_names,
+            vehicle_scores, frame=frame,
+        )
 
         # --- 2d. 违章检测 ---
         for track in tracks:
             tid = track.track_id
+            if track.was_updated:
+                plate_recognizer.observe(tid, frame, track.bbox)
 
             # 闯红灯检测
             violation = red_light_detector.check_violation(
@@ -326,36 +364,50 @@ def main():
             )
             if violation:
                 violation_ids.add(tid)
-                plate = plate_recognizer.recognize(frame, track.bbox)
+                plate = plate_recognizer.get_consensus(tid)
                 logger.log(
                     violation_type="red_light",
                     track_id=tid,
                     timestamp=timestamp,
                     frame_idx=frame_idx,
                     bbox=track.bbox,
-                    plate_number=plate or f"XX-{tid:04d}",
+                    plate_number=plate,
+                    traffic_light_state=light_state.value,
+                    detection_confidence=track.confidence,
+                    vehicle_class_id=int(track.class_id),
+                    vehicle_class_name=track.class_name,
+                    frame=frame,
                 )
 
             # 超速检测
-            if len(track.history) >= 2:
-                prev_center = track.history[-2]
+            if track.was_updated and tid in previous_observations:
+                prev_center, prev_timestamp = previous_observations[tid]
                 curr_center = track.center
                 violation = speeding_detector.check_violation(
                     tid, prev_center, curr_center,
                     track.bbox, timestamp, frame_idx,
+                    delta_time=timestamp - prev_timestamp,
                 )
                 if violation:
                     violation_ids.add(tid)
-                    plate = plate_recognizer.recognize(frame, track.bbox)
+                    plate = plate_recognizer.get_consensus(tid)
                     logger.log(
                         violation_type="speeding",
                         track_id=tid,
                         timestamp=timestamp,
                         frame_idx=frame_idx,
                         bbox=track.bbox,
-                        plate_number=plate or f"XX-{tid:04d}",
+                        plate_number=plate,
+                        traffic_light_state=light_state.value,
+                        detection_confidence=track.confidence,
+                        vehicle_class_id=int(track.class_id),
+                        vehicle_class_name=track.class_name,
+                        frame=frame,
                         extra={"speed_kmh": violation.speed_kmh},
                     )
+
+            if track.was_updated:
+                previous_observations[tid] = (track.center, timestamp)
 
             # 逆行检测（Mock 模式下跳过：所有车辆同向行驶，无逆行场景）
             if not args.mock and len(track.history) >= wrong_way_detector.min_history:
@@ -365,14 +417,19 @@ def main():
                 )
                 if violation:
                     violation_ids.add(tid)
-                    plate = plate_recognizer.recognize(frame, track.bbox)
+                    plate = plate_recognizer.get_consensus(tid)
                     logger.log(
                         violation_type="wrong_way",
                         track_id=tid,
                         timestamp=timestamp,
                         frame_idx=frame_idx,
                         bbox=track.bbox,
-                        plate_number=plate or f"XX-{tid:04d}",
+                        plate_number=plate,
+                        traffic_light_state=light_state.value,
+                        detection_confidence=track.confidence,
+                        vehicle_class_id=int(track.class_id),
+                        vehicle_class_name=track.class_name,
+                        frame=frame,
                         extra={"angle": violation.direction_angle},
                     )
 
@@ -434,7 +491,8 @@ def main():
     print("\n" + "=" * 60)
     print("  Processing Complete")
     print("=" * 60)
-    print(f"  Frames processed:  {frame_idx + 1}")
+    print(f"  Frames processed:  {processed_count}")
+    print(f"  Last source frame:  {last_frame_idx}")
     print(f"  Total violations:  {len(logger.violations)}")
     for vtype, count in summary.items():
         print(f"    - {vtype}: {count}")

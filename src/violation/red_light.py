@@ -7,9 +7,9 @@
 3. 记录违章时间戳和车辆信息
 """
 
-from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
-from collections import defaultdict
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 
@@ -24,6 +24,24 @@ class RedLightViolation:
     frame_idx: int
     bbox: Tuple[int, int, int, int]
     plate_number: Optional[str] = None
+
+
+class CrossingState(Enum):
+    """车辆相对停止线的位置状态。"""
+
+    BEFORE_LINE = "before_line"
+    CROSSING_LINE = "crossing_line"
+    AFTER_LINE = "after_line"
+
+
+@dataclass
+class TrackCrossingState:
+    """单辆车的跨线状态。"""
+
+    phase: CrossingState
+    previous_side: float
+    seen_before_line: bool
+    violation_recorded: bool = False
 
 
 class RedLightDetector:
@@ -45,12 +63,47 @@ class RedLightDetector:
         self.overlap_threshold = overlap_threshold
         self.red_light_duration = red_light_duration
 
-        # 追踪每辆车的违章状态
-        self._violation_candidates: dict = defaultdict(lambda: {
-            "start_frame": None,
-            "frames_in_violation": 0,
-        })
+        self._track_states: Dict[int, TrackCrossingState] = {}
+        self._last_light_state = TrafficLightState.UNKNOWN
+        self._red_since: Optional[float] = None
         self.violations: List[RedLightViolation] = []
+
+    def update_light_state(
+        self, light_state: TrafficLightState, timestamp: float
+    ) -> None:
+        """更新信号灯状态，并记录连续红灯的开始时间。"""
+        if light_state == TrafficLightState.RED:
+            if self._last_light_state != TrafficLightState.RED:
+                self._red_since = timestamp
+        else:
+            self._red_since = None
+        self._last_light_state = light_state
+
+    def _signed_side(self, bbox: Tuple[float, float, float, float]) -> float:
+        """返回车辆底边中点相对停止线的有符号距离近似值。"""
+        x1, _, x2, y2 = bbox
+        sx1, sy1, sx2, sy2 = self.stop_line
+        vehicle_x = (x1 + x2) / 2
+
+        if sx1 == sx2:
+            # 垂直停止线：默认从左向右穿越为正方向。
+            return vehicle_x - sx1
+
+        ratio = (vehicle_x - sx1) / (sx2 - sx1)
+        line_y = sy1 + ratio * (sy2 - sy1)
+        return y2 - line_y
+
+    def _within_stop_line_span(
+        self, bbox: Tuple[float, float, float, float]
+    ) -> bool:
+        """车辆中心投影是否位于停止线覆盖范围内。"""
+        x1, y1, x2, y2 = bbox
+        sx1, sy1, sx2, sy2 = self.stop_line
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+        if abs(sx2 - sx1) >= abs(sy2 - sy1):
+            return min(sx1, sx2) <= center_x <= max(sx1, sx2)
+        return min(sy1, sy2) <= center_y <= max(sy1, sy2)
 
     def _is_behind_stop_line(
         self, bbox: Tuple[float, float, float, float]
@@ -61,12 +114,7 @@ class RedLightDetector:
         简化逻辑：检测框底边中点 y 坐标是否超过停止线 y 坐标。
         实际应用需根据摄像头视角和道路几何调整。
         """
-        x1, y1, x2, y2 = bbox
-        vehicle_bottom = y2
-        stop_line_y = (self.stop_line[1] + self.stop_line[3]) / 2
-
-        # 车辆底边低于停止线 = 已越过停止线进入路口
-        return vehicle_bottom > stop_line_y
+        return self._signed_side(bbox) > 0
 
     def _bbox_overlap_stop_line(
         self, bbox: Tuple[float, float, float, float]
@@ -89,45 +137,6 @@ class RedLightDetector:
 
         return inter_area / bbox_area if bbox_area > 0 else 0.0
 
-    def update(
-        self,
-        track_id: int,
-        bbox: Tuple[float, float, float, float],
-        light_state: TrafficLightState,
-        timestamp: float,
-        frame_idx: int,
-    ) -> Optional[RedLightViolation]:
-        """
-        每帧更新：检测指定追踪车辆是否闯红灯。
-
-        Returns:
-            如果检测到闯红灯，返回违章记录；否则返回 None
-        """
-        # 只在红灯时检查
-        if light_state != TrafficLightState.RED:
-            # 重置绿灯/黄灯期间的候选状态
-            if track_id in self._violation_candidates:
-                del self._violation_candidates[track_id]
-            return None
-
-        # 检查车辆是否越过停止线
-        overlap = self._bbox_overlap_stop_line(bbox)
-        behind_line = self._is_behind_stop_line(bbox)
-
-        if not behind_line and overlap < self.overlap_threshold:
-            # 车辆未越线
-            if track_id in self._violation_candidates:
-                del self._violation_candidates[track_id]
-            return None
-
-        # 车辆在红灯状态下越线
-        candidate = self._violation_candidates[track_id]
-        if candidate["start_frame"] is None:
-            candidate["start_frame"] = frame_idx
-        candidate["frames_in_violation"] += 1
-
-        return None
-
     def check_violation(
         self,
         track_id: int,
@@ -137,30 +146,63 @@ class RedLightDetector:
         frame_idx: int,
         fps: float = 30.0,
     ) -> Optional[RedLightViolation]:
-        """
-        综合检查：先 update，再判断是否构成完整违章。
+        """检测车辆是否在连续红灯期间从停止线前方跨到后方。
 
-        Args:
-            fps: 视频帧率，用于将帧数转换为时长
+        ``fps`` 为兼容旧调用保留；判定使用视频时间戳，不受跳帧影响。
         """
-        self.update(track_id, bbox, light_state, timestamp, frame_idx)
+        self.update_light_state(light_state, timestamp)
+        side = self._signed_side(bbox)
+        state = self._track_states.get(track_id)
 
-        if track_id not in self._violation_candidates:
+        if state is None:
+            self._track_states[track_id] = TrackCrossingState(
+                phase=(
+                    CrossingState.BEFORE_LINE
+                    if side <= 0
+                    else CrossingState.AFTER_LINE
+                ),
+                previous_side=side,
+                seen_before_line=side <= 0,
+            )
             return None
 
-        candidate = self._violation_candidates[track_id]
-        duration = candidate["frames_in_violation"] / fps
+        crossed_forward = (
+            state.previous_side <= 0
+            and side > 0
+            and self._within_stop_line_span(bbox)
+        )
 
-        if duration >= self.red_light_duration:
-            violation = RedLightViolation(
-                track_id=track_id,
-                timestamp=timestamp,
-                frame_idx=frame_idx,
-                bbox=tuple(int(v) for v in bbox),
-            )
-            self.violations.append(violation)
-            # 清除已记录的违章，避免重复
-            del self._violation_candidates[track_id]
-            return violation
+        if side <= 0:
+            state.phase = CrossingState.BEFORE_LINE
+            state.seen_before_line = True
+        elif crossed_forward:
+            state.phase = CrossingState.CROSSING_LINE
+        else:
+            state.phase = CrossingState.AFTER_LINE
 
-        return None
+        red_duration = (
+            timestamp - self._red_since
+            if self._red_since is not None
+            else 0.0
+        )
+        is_violation = (
+            crossed_forward
+            and state.seen_before_line
+            and light_state == TrafficLightState.RED
+            and red_duration >= self.red_light_duration
+            and not state.violation_recorded
+        )
+        state.previous_side = side
+
+        if not is_violation:
+            return None
+
+        state.violation_recorded = True
+        violation = RedLightViolation(
+            track_id=track_id,
+            timestamp=timestamp,
+            frame_idx=frame_idx,
+            bbox=tuple(int(v) for v in bbox),
+        )
+        self.violations.append(violation)
+        return violation

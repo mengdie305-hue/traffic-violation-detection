@@ -29,13 +29,20 @@ class VideoProcessor:
             frame_skip: 跳帧数，1=逐帧处理，N=每 N 帧处理一次
         """
         self.input_path = Path(input_path)
+        if frame_skip < 1:
+            raise ValueError("frame_skip must be >= 1")
         self.frame_skip = frame_skip
 
         if not self.input_path.exists():
             raise FileNotFoundError(f"Video not found: {input_path}")
 
         self.cap = cv2.VideoCapture(str(self.input_path))
+        if not self.cap.isOpened():
+            raise ValueError(f"Unable to open video: {input_path}")
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.fps <= 0:
+            raise ValueError(f"Unable to read a valid FPS from: {input_path}")
+        self.processing_fps = self.fps / self.frame_skip
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -49,8 +56,11 @@ class VideoProcessor:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             self._writer = cv2.VideoWriter(
-                output_path, fourcc, self.fps, (self.width, self.height)
+                output_path, fourcc, self.processing_fps,
+                (self.width, self.height)
             )
+            if not self._writer.isOpened():
+                raise ValueError(f"Unable to create output video: {output_path}")
 
         print(
             f"[VideoProcessor] {self.input_path.name}: "
@@ -100,7 +110,12 @@ class VideoProcessor:
         return frame if ret else None
 
     def get_fps(self) -> float:
+        """返回源视频 FPS，用于基于原始帧号计算时间戳。"""
         return self.fps
+
+    def get_processing_fps(self) -> float:
+        """返回处理帧流 FPS，用于仅写出处理帧的输出视频。"""
+        return self.processing_fps
 
     def __enter__(self):
         return self
