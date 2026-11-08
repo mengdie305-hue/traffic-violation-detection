@@ -5,10 +5,11 @@
 
 ## 真实视频候选数据
 
-- 已选定 `rlr_occasions.mp4` 作为第一条真实视频验证样本，文件大小 50,894,047 bytes，MD5 为 `b8cdcc48799eb04df21bff98a33788e5`。
+- 已选定 `video6.mp4` 作为第一条真实视频验证样本，文件大小 9,829,975 bytes，MD5 为 `caa146f7ba10f2081c4922f42d9a42f8`。
 - 来源：Tiago Silva, *Dataset for Traffic Evaluation*, v2, Zenodo, DOI: [10.5281/zenodo.14041920](https://doi.org/10.5281/zenodo.14041920)。
 - 许可：CC BY 4.0。论文、报告和演示中使用视频或实验结果时保留以上署名与 DOI。
 - Colab notebook 已支持直接下载并校验该视频，无需从本地上传。
+- 选材检查：`rlr_occasions.mp4` 是包含浏览器界面和多个场景切换的 YouTube 合集屏幕录制，不符合当前固定 ROI 假设；`video6.mp4` 是约 8 秒的单一固定机位片段，红灯、停止线和车辆均清晰可见，因此改用后者。
 - 注意：选定样本不等于已经完成真实视频验证；仍需根据首帧标定停止线与交通灯 ROI，再运行 YOLO + DeepSORT 并核验事件日志。
 
 ## 环境

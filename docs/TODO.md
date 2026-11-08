@@ -154,7 +154,7 @@
 | 必须 | 自建固定机位路口数据 | 最终场景适配、闯红灯事件评估 | 从有授权的视频抽帧并标注；保留完整视频用于端到端测试 | 必须按视频划分 train/val/test，不能随机拆散相邻帧 |
 | 推荐 | [BDD100K](https://bdd-data.berkeley.edu/) | 车辆检测、道路场景泛化、多目标追踪 | 选择 detection/tracking 子集，转换成项目需要的车辆类别 | 数据量大；车载视角与固定 CCTV 视角存在域差异 |
 | 推荐 | [AI City Challenge](https://www.aicitychallenge.org/ai-city-challenge-dataset-access/) | 交通监控视角的车辆检测与追踪 | 选择车辆跟踪或道路目标相关年份/赛道 | 下载和使用前检查对应年份的数据许可 |
-| 第一轮验证 | [Dataset for Traffic Evaluation v2](https://doi.org/10.5281/zenodo.14041920) | 交通分析与闯红灯检测视频 | `rlr_occasions.mp4`（50.9 MB） | CC BY 4.0；引用 Tiago Silva 与 DOI |
+| 第一轮验证 | [Dataset for Traffic Evaluation v2](https://doi.org/10.5281/zenodo.14041920) | 交通分析与闯红灯检测视频 | `video6.mp4`（9.8 MB，固定机位短片） | CC BY 4.0；引用 Tiago Silva 与 DOI |
 | 推荐 | [Bosch Small Traffic Lights Dataset](https://zenodo.org/records/12706046) | 小目标交通灯检测 | 用于训练或验证信号灯定位；颜色状态仍需检查标注类别 | 完整数据较大，许可限定非商业用途 |
 | 中国车牌 | [CCPD](https://github.com/detectRecog/CCPD) | 中国车牌检测与识别 | 先使用 CCPD-Base，再用 Blur、Rotate、Tilt、Challenge 子集测试鲁棒性 | 以停车场视角为主，与 CCTV 远距离车牌有域差异 |
 | 非中国车牌 | [UFPR-ALPR](https://web.inf.ufpr.br/vri/databases/ufpr-alpr/) | 车辆与车牌检测、车牌字符识别 | 当论文场景不是中国车牌时使用 | 车牌格式与部署国家/地区必须一致 |
