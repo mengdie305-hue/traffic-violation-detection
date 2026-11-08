@@ -86,6 +86,19 @@ python src/main.py --video data/videos/real_intersection.mp4 --config configs/co
 python src/main.py --mock --video data/videos/test_intersection.mp4 --show
 ```
 
+### Google Colab（免费 T4）
+
+无需本地安装 CUDA。打开
+[`notebooks/Traffic_Violation_Colab.ipynb`](notebooks/Traffic_Violation_Colab.ipynb)，
+在 Colab 中选择 `T4 GPU` 后按顺序运行。Notebook 会完成环境检查、依赖安装、
+自动化测试、Mock 闭环验证、真实视频上传、ROI 配置、YOLO + DeepSORT 推理和
+结果下载。
+
+Colab 当前 Python 3.13 环境先使用 `requirements-colab.txt`，不安装
+PaddlePaddle/PaddleOCR；第一轮真实视频验证中的车牌结果会明确记录为
+`UNKNOWN`。OCR 将在兼容的独立环境中验证，不影响车辆检测、追踪和闯红灯
+状态机测试。
+
 ## 两种运行模式
 
 | 模式 | 命令 | 检测方式 | 适用场景 |
