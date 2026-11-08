@@ -245,10 +245,22 @@ def main():
     )
 
     # --- 交通灯识别（mock 模式下内联处理，不用此实例）---
+    traffic_light_cfg = config.get("traffic_light", {})
     tl_detector = TrafficLightDetector(
-        brightness_threshold=30 if args.mock else 100,
-        min_area_ratio=0.02 if args.mock else 0.05,
+        brightness_threshold=(
+            30
+            if args.mock
+            else traffic_light_cfg.get("brightness_threshold", 100)
+        ),
+        min_area_ratio=(
+            0.02
+            if args.mock
+            else traffic_light_cfg.get("min_area_ratio", 0.05)
+        ),
     )
+    traffic_light_source = traffic_light_cfg.get("source", "configured_roi")
+    if traffic_light_source not in {"configured_roi", "yolo"}:
+        raise ValueError("traffic_light.source must be configured_roi or yolo")
 
     # --- 车牌识别 ---
     recognition_cfg = config.get("recognition", {})
@@ -266,6 +278,9 @@ def main():
     # --- 违章检测器 ---
     roi_cfg = config["roi"]
     v_cfg = config["violation"]
+    red_light_enabled = v_cfg["red_light"].get("enabled", True)
+    speeding_enabled = v_cfg["speeding"].get("enabled", True)
+    wrong_way_enabled = v_cfg["wrong_way"].get("enabled", True)
 
     # Mock 模式下用模拟视频专用的停止线坐标
     if args.mock:
@@ -334,7 +349,7 @@ def main():
         if args.mock:
             # Mock 模式：直接从固定位置识别颜色
             light_state = _detect_traffic_light_mock(frame)
-        else:
+        elif traffic_light_source == "yolo":
             tl_boxes, tl_scores, tl_classes = detector.detect_traffic_lights(frame)
             light_state = TrafficLightState.UNKNOWN
             if len(tl_boxes) > 0:
@@ -346,6 +361,9 @@ def main():
             else:
                 x1, y1, x2, y2 = tl_roi
                 light_state = tl_detector.recognize(frame[y1:y2, x1:x2])
+        else:
+            x1, y1, x2, y2 = tl_roi
+            light_state = tl_detector.recognize(frame[y1:y2, x1:x2])
 
         # 即使当前帧没有车辆，也要维护连续红灯的真实开始时间。
         red_light_detector.update_light_state(light_state, timestamp)
@@ -363,10 +381,12 @@ def main():
                 plate_recognizer.observe(tid, frame, track.bbox)
 
             # 闯红灯检测
-            violation = red_light_detector.check_violation(
-                tid, track.bbox, light_state,
-                timestamp, frame_idx, video.get_fps(),
-            )
+            violation = None
+            if red_light_enabled:
+                violation = red_light_detector.check_violation(
+                    tid, track.bbox, light_state,
+                    timestamp, frame_idx, video.get_fps(),
+                )
             if violation:
                 violation_ids.add(tid)
                 plate = plate_recognizer.get_consensus(tid)
@@ -385,7 +405,11 @@ def main():
                 )
 
             # 超速检测
-            if track.was_updated and tid in previous_observations:
+            if (
+                speeding_enabled
+                and track.was_updated
+                and tid in previous_observations
+            ):
                 prev_center, prev_timestamp = previous_observations[tid]
                 curr_center = track.center
                 violation = speeding_detector.check_violation(
@@ -415,7 +439,11 @@ def main():
                 previous_observations[tid] = (track.center, timestamp)
 
             # 逆行检测（Mock 模式下跳过：所有车辆同向行驶，无逆行场景）
-            if not args.mock and len(track.history) >= wrong_way_detector.min_history:
+            if (
+                wrong_way_enabled
+                and not args.mock
+                and len(track.history) >= wrong_way_detector.min_history
+            ):
                 violation = wrong_way_detector.check_violation(
                     tid, track.history,
                     track.bbox, timestamp, frame_idx,

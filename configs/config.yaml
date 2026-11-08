@@ -28,6 +28,12 @@ tracking:
   max_cosine_distance: 0.2                 # DeepSORT 外观特征门限
   embedder: "mobilenet"
 
+# 交通灯状态识别。固定监控机位优先使用人工标定 ROI；移动或未知机位可改为 yolo。
+traffic_light:
+  source: "configured_roi"                 # configured_roi / yolo
+  brightness_threshold: 100
+  min_area_ratio: 0.05
+
 # 视频参数
 video:
   input_path: "data/videos/sample.mp4"
@@ -49,13 +55,16 @@ roi:
 # 违章判定阈值
 violation:
   red_light:
+    enabled: true
     overlap_threshold: 0.3                  # 车辆与停止线的 IoU 阈值
     red_light_duration: 1.0                 # 红灯稳定至少 N 秒后才接受跨线事件
     crossing_direction: "downward"          # downward/upward/rightward/leftward
   speeding:
+    enabled: true
     max_speed_kmh: 60                       # 最高限速（km/h）
     pixel_to_meter_ratio: 0.05              # 像素到米的转换比例（需标定）
   wrong_way:
+    enabled: true
     angle_threshold: 30                     # 行驶方向偏差角（度）
 
 # 日志
