@@ -51,6 +51,7 @@ violation:
   red_light:
     overlap_threshold: 0.3                  # 车辆与停止线的 IoU 阈值
     red_light_duration: 1.0                 # 红灯稳定至少 N 秒后才接受跨线事件
+    crossing_direction: "downward"          # downward/upward/rightward/leftward
   speeding:
     max_speed_kmh: 60                       # 最高限速（km/h）
     pixel_to_meter_ratio: 0.05              # 像素到米的转换比例（需标定）

@@ -277,6 +277,11 @@ def main():
         stop_line=stop_line,
         overlap_threshold=0.05 if args.mock else v_cfg["red_light"]["overlap_threshold"],
         red_light_duration=0.5 if args.mock else v_cfg["red_light"]["red_light_duration"],
+        crossing_direction=(
+            "downward"
+            if args.mock
+            else v_cfg["red_light"].get("crossing_direction", "downward")
+        ),
     )
     speeding_detector = SpeedingDetector(
         max_speed_kmh=200 if args.mock else v_cfg["speeding"]["max_speed_kmh"],

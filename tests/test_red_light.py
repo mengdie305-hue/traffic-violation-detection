@@ -101,3 +101,36 @@ def test_crossing_outside_stop_line_span_is_ignored():
         detector, 5, (600, 250, 700, 320),
         TrafficLightState.RED, 1.1, 33,
     ) is None
+
+
+def test_upward_crossing_creates_one_event():
+    detector = RedLightDetector(
+        stop_line=(100, 300, 500, 300),
+        red_light_duration=0.0,
+        crossing_direction="upward",
+    )
+
+    assert _check(
+        detector, 6, (200, 280, 300, 330),
+        TrafficLightState.RED, 1.0, 30,
+    ) is None
+    violation = _check(
+        detector, 6, (200, 230, 300, 290),
+        TrafficLightState.RED, 1.1, 33,
+    )
+
+    assert violation is not None
+    assert violation.track_id == 6
+    assert detector._track_states[6].phase == CrossingState.CROSSING_LINE
+
+
+def test_invalid_crossing_direction_is_rejected():
+    try:
+        RedLightDetector(
+            stop_line=(100, 300, 500, 300),
+            crossing_direction="diagonal",
+        )
+    except ValueError as exc:
+        assert "crossing_direction" in str(exc)
+    else:
+        raise AssertionError("invalid crossing direction should raise ValueError")

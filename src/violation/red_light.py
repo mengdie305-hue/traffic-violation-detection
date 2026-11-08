@@ -52,16 +52,30 @@ class RedLightDetector:
         stop_line: Tuple[int, int, int, int],  # (x1, y1, x2, y2)
         overlap_threshold: float = 0.3,
         red_light_duration: float = 1.0,
+        crossing_direction: str = "downward",
     ):
         """
         Args:
             stop_line: 停止线像素坐标
             overlap_threshold: 车辆与停止线区域的碰撞阈值
             red_light_duration: 红灯期间进入路口的最小持续时间（秒）才判定违章
+            crossing_direction: 有效越线方向，``downward``/``rightward`` 表示
+                有符号距离从负到正，``upward``/``leftward`` 表示从正到负
         """
         self.stop_line = stop_line
         self.overlap_threshold = overlap_threshold
         self.red_light_duration = red_light_duration
+        direction = crossing_direction.lower()
+        if direction in {"downward", "rightward", "positive"}:
+            self._crossing_sign = 1.0
+        elif direction in {"upward", "leftward", "negative"}:
+            self._crossing_sign = -1.0
+        else:
+            raise ValueError(
+                "crossing_direction must be downward/rightward/positive "
+                "or upward/leftward/negative"
+            )
+        self.crossing_direction = direction
 
         self._track_states: Dict[int, TrackCrossingState] = {}
         self._last_light_state = TrafficLightState.UNKNOWN
@@ -151,7 +165,9 @@ class RedLightDetector:
         ``fps`` 为兼容旧调用保留；判定使用视频时间戳，不受跳帧影响。
         """
         self.update_light_state(light_state, timestamp)
-        side = self._signed_side(bbox)
+        # 将目标方向统一映射为“负侧 → 正侧”，使状态机同时支持
+        # 向上/向左和向下/向右的车辆越线。
+        side = self._crossing_sign * self._signed_side(bbox)
         state = self._track_states.get(track_id)
 
         if state is None:
