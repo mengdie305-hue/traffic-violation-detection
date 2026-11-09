@@ -1,0 +1,28 @@
+{
+  "$schema": "video_annotation.schema.json",
+  "schema_version": "1.0",
+  "video": {
+    "id": "zenodo_night_001",
+    "file": "data/processed/annotation_workset/zenodo_night_001.mp4",
+    "fps": 30.0,
+    "frames": 3015,
+    "width": 1280,
+    "height": 648,
+    "source_url": "https://doi.org/10.5281/zenodo.14041920",
+    "license": "CC BY 4.0",
+    "source_sha256": "1205d0080225070edebc7c04ac37542bfe6922f540ec259118581978eff411ce",
+    "processed_sha256": "07dc8be726b449cd716603800397aec23f8c3494e829cb9554da82788f934099",
+    "trim": {"source_start_frame": 90, "source_end_frame_exclusive": 3105},
+    "crop": {"top": 32, "bottom": 40, "left": 0, "right": 0}
+  },
+  "camera": {
+    "calibration_status": "pending",
+    "stop_line": null,
+    "crossing_direction": null,
+    "traffic_light_rois": []
+  },
+  "light_intervals": [],
+  "tracks": [],
+  "events": [],
+  "review": {"annotation_status": "not_started", "reviewer": null, "reviewed_at": null, "notes": ""}
+}

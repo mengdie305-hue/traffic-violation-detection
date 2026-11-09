@@ -1,0 +1,28 @@
+{
+  "$schema": "video_annotation.schema.json",
+  "schema_version": "1.0",
+  "video": {
+    "id": "zenodo_snow_001",
+    "file": "data/processed/annotation_workset/zenodo_snow_001.mp4",
+    "fps": 30.0,
+    "frames": 2730,
+    "width": 1280,
+    "height": 696,
+    "source_url": "https://doi.org/10.5281/zenodo.14041920",
+    "license": "CC BY 4.0",
+    "source_sha256": "ac131a355aeeb2493c170d1497ab172f0548786d1cda08e05236f4a5fe4fae82",
+    "processed_sha256": "c727d2dda6a3759d2385c59f51ab2e3b2e7cb8f27a20cab3391b97ac4e3799fa",
+    "trim": {"source_start_frame": 120, "source_end_frame_exclusive": 2850},
+    "crop": {"top": 24, "bottom": 0, "left": 0, "right": 0}
+  },
+  "camera": {
+    "calibration_status": "pending",
+    "stop_line": null,
+    "crossing_direction": null,
+    "traffic_light_rois": []
+  },
+  "light_intervals": [],
+  "tracks": [],
+  "events": [],
+  "review": {"annotation_status": "not_started", "reviewer": null, "reviewed_at": null, "notes": ""}
+}

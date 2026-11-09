@@ -19,6 +19,7 @@ venv/
 
 # Data (large files)
 data/raw/
+data/processed/
 data/videos/*.mp4
 data/logs/*.csv
 data/logs/*.jsonl

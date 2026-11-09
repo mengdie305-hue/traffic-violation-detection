@@ -1,0 +1,3 @@
+video_id,source_file,processed_file,split,trim_start_frame,trim_end_frame_exclusive,crop_top,crop_bottom,width,height,fps,frames,duration_seconds,processed_sha256,annotation_status
+zenodo_night_001,data/raw/candidates/zenodo_14041920/2024-11-04_12-00-31.mp4,data/processed/annotation_workset/zenodo_night_001.mp4,development,90,3105,32,40,1280,648,30,3015,100.5,07dc8be726b449cd716603800397aec23f8c3494e829cb9554da82788f934099,not_started
+zenodo_snow_001,data/raw/candidates/zenodo_14041920/teste2_6.mp4,data/processed/annotation_workset/zenodo_snow_001.mp4,validation,120,2850,24,0,1280,696,30,2730,91.0,c727d2dda6a3759d2385c59f51ab2e3b2e7cb8f27a20cab3391b97ac4e3799fa,not_started

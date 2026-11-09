@@ -79,8 +79,57 @@ final test:
 
 ## 下一步筛选标准
 
-1. 为两个已下载长片生成不改变原始文件的干净工作副本。
+1. ~~为两个已下载长片生成不改变原始文件的干净工作副本。~~ 已完成，参数见下表。
 2. 完整观看并记录信号灯状态区间、正常停车/通过事件和疑似闯红灯事件。
 3. 给每个机位单独标定停止线、交通灯 ROI 和允许越线方向。
 4. 将视频上传 CVAT，以 Video Interpolation 模式标车辆轨迹和关键事件。
 5. 完成标注后才确定 train/validation/test，不依据模型预测结果挑选测试片段。
+
+## 第一批标注工作集
+
+| 视频 ID | 源帧区间（结束帧不含） | 空间裁剪（上/下） | 工作副本 | 用途 |
+|---|---:|---:|---|---|
+| `zenodo_night_001` | `[90, 3105)` | `32 / 40 px` | 3015 帧，100.5 秒，1280x648 | development |
+| `zenodo_snow_001` | `[120, 2850)` | `24 / 0 px` | 2730 帧，91 秒，1280x696 | validation |
+
+原始视频位于 `data/raw/`，工作副本位于 `data/processed/annotation_workset/`，二者均不提交 Git。
+工作副本清除了录屏首尾的浏览器界面以及播放器标题/控制条。文件列表、裁剪参数和 SHA256
+记录在 `data/manifests/annotation_workset.csv`；事件、轨迹、信号灯区间和机位标定统一使用
+`data/annotations/video_annotation.schema.json`。
+
+可使用以下命令重新生成夜间工作副本：
+
+```bash
+python scripts/prepare_annotation_video.py \
+  --input data/raw/candidates/zenodo_14041920/2024-11-04_12-00-31.mp4 \
+  --output data/processed/annotation_workset/zenodo_night_001.mp4 \
+  --start 3 --end 103.5 --crop-top 32 --crop-bottom 40
+```
+
+## CVAT 预标注
+
+`scripts/preannotate_cvat.py` 使用 COCO 预训练 YOLOv8n 检测车辆，再用完整
+`deep-sort-realtime` 生成轨迹建议。输出 XML 只用于减少人工画框工作量，不能直接作为论文真值。
+
+```bash
+python scripts/preannotate_cvat.py \
+  --video data/processed/annotation_workset/zenodo_night_001.mp4 \
+  --output data/processed/preannotations/zenodo_night_001.xml \
+  --frame-step 6 --device cpu
+```
+
+本轮本地输出如下：
+
+- `zenodo_night_001.xml`：136 条候选轨迹、2286 个关键框。
+- `zenodo_snow_001.xml`：168 条候选轨迹、3839 个关键框。
+
+在 CVAT 中分别创建两个 **video** task，标签预先建立为 `car`、`motorcycle`、`bus`、
+`truck`，上传对应 MP4 后使用 **Upload annotations → CVAT 1.1** 导入 XML。导入后必须：
+
+1. 删除路边静止车辆、重复框和错误类别；
+2. 合并 ID Switch 造成的断裂轨迹，补齐漏检车辆；
+3. 标记每个方向对应的信号灯状态区间；
+4. 只在轨迹和信号灯复核完成后填写 `events`，并由第二次人工复核确认。
+
+由于预标注按每 6 帧推理一次，CVAT 会在关键框之间插值；车辆刚进入或离开画面时要特别检查
+轨迹起止帧。最终导出的真值应回填到 `data/annotations/zenodo_*.json`，不要覆盖预标注 XML。
