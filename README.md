@@ -99,6 +99,11 @@ PaddlePaddle/PaddleOCR；第一轮真实视频验证中的车牌结果会明确�
 `UNKNOWN`。OCR 将在兼容的独立环境中验证，不影响车辆检测、追踪和闯红灯
 状态机测试。
 
+准备两段固定机位长视频并生成 CVAT 预标注时，使用
+[`notebooks/Annotation_Workset_Colab.ipynb`](notebooks/Annotation_Workset_Colab.ipynb)。
+它会下载并校验 Zenodo 原片、按 manifest 裁剪工作副本，并使用 T4 运行
+YOLOv8n + DeepSORT，最终下载可导入 CVAT 的 XML 压缩包。
+
 ## 两种运行模式
 
 | 模式 | 命令 | 检测方式 | 适用场景 |

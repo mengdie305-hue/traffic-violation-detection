@@ -75,3 +75,21 @@ Notebook 已增加 FFmpeg H.264 转码（`libx264`、`yuv420p`、`faststart`）�
 并标注多段相互独立的固定机位视频，按原始视频划分训练集、验证集和测试集，再计算车辆
 检测、追踪、交通灯识别和闯红灯事件指标。车牌在本样本中不可读，因此 OCR 的真实效果
 需要使用车牌清晰且有合法使用授权的独立数据进行验证。
+
+## 2026-11-09 固定机位工作集验证
+
+- Colab 成功分配 Tesla T4，PyTorch `2.14.1+cu130`，CUDA 可用。
+- 拉取 GitHub `main` 最新代码后，依赖安装和自动化测试返回码均为 0。
+- YOLOv8n 权重最终成功下载并加载，文件大小 6,549,796 bytes；首次下载遇到暂时性
+  GitHub 504，Notebook 已增加 Ultralytics Hugging Face 镜像作为回退。
+- 从 Zenodo 直接下载并核对两个原始文件 SHA256，随后按
+  `data/manifests/annotation_workset.csv` 生成裁剪工作副本。
+- 使用 `--frame-step 6 --device cuda` 完成两段视频的 YOLOv8n + DeepSORT 预标注，
+  从下载开始到全部完成约 157 秒。
+- 夜间视频输出 144 条候选轨迹、2229 个关键框；雪天视频输出 163 条候选轨迹、
+  3706 个关键框。
+- 峰值系统内存约 3.14 GB，没有出现 CUDA OOM，说明当前数据准备、推理和小规模训练阶段
+  不需要另租 3080 Ti。
+
+这些数字是模型预标注统计，不是模型准确率。XML 必须在 CVAT 中人工修正后，才能作为
+Precision、Recall、IDF1 和违章事件 F1 的真实标注。
