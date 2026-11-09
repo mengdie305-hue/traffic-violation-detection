@@ -18,6 +18,7 @@ venv/
 .DS_Store
 
 # Data (large files)
+data/raw/
 data/videos/*.mp4
 data/logs/*.csv
 data/logs/*.jsonl
@@ -31,6 +32,8 @@ data/models/*.t7
 # Training outputs
 runs/
 outputs/
+output/
+tmp/
 
 # Jupyter
 .ipynb_checkpoints/

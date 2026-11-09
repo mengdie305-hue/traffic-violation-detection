@@ -225,7 +225,7 @@ data/
 └── models/                      # 训练得到的权重
 ```
 
-- [ ] 将 `data/raw/`、训练缓存和模型输出加入 `.gitignore`
+- [x] 将 `data/raw/`、训练缓存和模型输出加入 `.gitignore`
 - [ ] 为每个数据集保存来源 URL、下载日期、版本和许可说明
 - [ ] 为下载文件保存 SHA256 校验值
 - [ ] 用 manifest 固定 train/val/test 文件列表
